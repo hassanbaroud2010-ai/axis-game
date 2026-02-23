@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXIS — Studio Local Build</title>
+
+<style>
+:root{
+    --bg:#0B0C10;
+    --panel:#111217;
+    --soft:#1F2833;
+    --accent:#66FCF1;
+    --text:#E6E6EA;
+    --muted:#8A8F98;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:Arial, Helvetica, sans-serif;
+}
+
+header{
+    height:60px;
+    border-bottom:1px solid var(--soft);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 40px;
+}
+
+.logo{
+    color:var(--accent);
+    letter-spacing:4px;
+    font-weight:bold;
+}
+
+nav span{
+    margin-left:25px;
+    cursor:pointer;
+    font-size:14px;
+    color:var(--muted);
+}
+
+nav span.active{
+    color:var(--accent);
+}
+
+.section{
+    display:none;
+    padding:40px;
+}
+
+.section.active{
+    display:block;
+}
+
+.panel{
+    background:var(--panel);
+    border:1px solid var(--soft);
+    padding:25px;
+    margin-bottom:20px;
+}
+
+button{
+    background:none;
+    border:1px solid var(--accent);
+    color:var(--accent);
+    padding:6px 14px;
+    cursor:pointer;
+    margin:6px 4px;
+}
+
+button:hover{
+    background:var(--accent);
+    color:var(--bg);
+}
+
+input{
+    background:var(--soft);
+    border:none;
+    color:var(--text);
+    padding:6px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:repeat(4,60px);
+    gap:8px;
+    margin-top:20px;
+}
+
+.cell{
+    width:60px;
+    height:60px;
+    background:var(--soft);
+    cursor:pointer;
+}
+
+.cell.active{
+    background:var(--accent);
+}
+
+.stat{
+    font-size:13px;
+    color:var(--muted);
+    margin:4px 0;
+}
+
+.badge{
+    color:var(--accent);
+    font-size:13px;
+    margin-top:8px;
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="logo">AXIS</div>
+<nav>
+<span onclick="UI.show('game')" class="active">Game</span>
+<span onclick="UI.show('profile')">Profile</span>
+<span onclick="UI.show('store')">Store</span>
+<span onclick="UI.show('clans')">Clans</span>
+<span onclick="UI.show('rankings')">Rankings</span>
+<span onclick="UI.show('constitution')">Constitution</span>
+</nav>
+</header>
+
+<!-- GAME -->
+<div id="game" class="section active">
+<div class="panel">
+<div class="stat">Moves: <span id="moves">0</span></div>
+<div class="stat">Optimal: <span id="optimal">6</span></div>
+<div class="grid" id="grid"></div>
+<button onclick="Game.undo()">Undo</button>
+<button onclick="Game.restart()">Restart</button>
+<div class="badge" id="gameMessage"></div>
+</div>
+</div>
+
+<!-- PROFILE -->
+<div id="profile" class="section">
+<div class="panel">
+<h3>Player</h3>
+<input id="playerName" maxlength="16">
+<button onclick="Profile.saveName()">Save</button>
+<div class="stat">Axis ID: <span id="axisID"></span></div>
+<div class="stat">Level Clears: <span id="clears"></span></div>
+<div class="stat">Perfect Clears: <span id="perfects"></span></div>
+<div class="stat">Total Moves: <span id="totalMoves"></span></div>
+<div class="stat">Efficiency: <span id="efficiency"></span>%</div>
+</div>
+</div>
+
+<!-- STORE -->
+<div id="store" class="section">
+<div class="panel">
+<h3>Themes</h3>
+<button onclick="Store.setTheme('default')">Default</button>
+<button onclick="Store.setTheme('mono')">Monochrome</button>
+<button onclick="Store.setTheme('blue')">Blue</button>
+<div class="stat">Active: <span id="activeTheme"></span></div>
+</div>
+</div>
+
+<!-- CLANS -->
+<div id="clans" class="section">
+<div class="panel">
+<h3>Clan</h3>
+<input id="clanName" placeholder="Create Clan">
+<button onclick="Clans.create()">Create</button>
+<div class="stat">Current Clan: <span id="currentClan">None</span></div>
+</div>
+</div>
+
+<!-- RANKINGS -->
+<div id="rankings" class="section">
+<div class="panel">
+<h3>Season Ranking</h3>
+<div class="stat">Season Score: <span id="seasonScore"></span></div>
+<div class="stat">Best Season: <span id="bestSeason"></span></div>
+</div>
+</div>
+
+<!-- CONSTITUTION -->
+<div id="constitution" class="section">
+<div class="panel">
+<h3>AXIS Constitution</h3>
+<div class="stat">No Ads</div>
+<div class="stat">No Manipulation</div>
+<div class="stat">Optimal Verified</div>
+<div class="stat">Core Immutable</div>
+</div>
+</div>
+
+<script>
+  /* =========================
+   AXIS DATA LAYER
+========================= */
+
+const Storage = {
+    key:"AXIS_LOCAL_V1",
+    load(){
+        const raw = localStorage.getItem(this.key);
+        if(!raw) return null;
+        return JSON.parse(raw);
+    },
+    save(data){
+        localStorage.setItem(this.key, JSON.stringify(data));
+    }
+};
+
+let AXIS = Storage.load() || {
+    axisID:"AX-" + Math.floor(Math.random()*999999),
+    name:"Player",
+    clears:0,
+    perfects:0,
+    totalMoves:0,
+    seasonScore:0,
+    bestSeason:0,
+    theme:"default",
+    clan:null
+};
+
+Storage.save(AXIS);
+
+/* =========================
+   UI SYSTEM
+========================= */
+
+const UI = {
+    show(id){
+        document.querySelectorAll(".section").forEach(s=>{
+            s.classList.remove("active");
+        });
+        document.getElementById(id).classList.add("active");
+
+        document.querySelectorAll("nav span").forEach(n=>{
+            n.classList.remove("active");
+        });
+
+        event.target.classList.add("active");
+
+        Profile.refresh();
+        Rankings.refresh();
+    }
+};
+
+/* =========================
+   PROFILE SYSTEM
+========================= */
+
+const Profile = {
+    saveName(){
+        const val = document.getElementById("playerName").value.trim();
+        if(val.length > 0){
+            AXIS.name = val;
+            Storage.save(AXIS);
+        }
+        this.refresh();
+    },
+    refresh(){
+        document.getElementById("playerName").value = AXIS.name;
+        document.getElementById("axisID").innerText = AXIS.axisID;
+        document.getElementById("clears").innerText = AXIS.clears;
+        document.getElementById("perfects").innerText = AXIS.perfects;
+        document.getElementById("totalMoves").innerText = AXIS.totalMoves;
+
+        let efficiency = 0;
+        if(AXIS.totalMoves > 0){
+            efficiency = Math.floor((AXIS.perfects / AXIS.clears || 0) * 100);
+        }
+        document.getElementById("efficiency").innerText = efficiency;
+    }
+};
+
+/* =========================
+   THEME SYSTEM
+========================= */
+
+const Store = {
+    setTheme(t){
+        AXIS.theme = t;
+        Storage.save(AXIS);
+        this.apply();
+    },
+    apply(){
+        const root = document.documentElement;
+        if(AXIS.theme === "mono"){
+            root.style.setProperty('--accent', '#AAAAAA');
+        }
+        else if(AXIS.theme === "blue"){
+            root.style.setProperty('--accent', '#3A86FF');
+        }
+        else{
+            root.style.setProperty('--accent', '#66FCF1');
+        }
+        document.getElementById("activeTheme").innerText = AXIS.theme;
+    }
+};
+
+/* =========================
+   CLAN SYSTEM
+========================= */
+
+const Clans = {
+    create(){
+        const val = document.getElementById("clanName").value.trim();
+        if(val.length > 0){
+            AXIS.clan = val;
+            Storage.save(AXIS);
+            this.refresh();
+        }
+    },
+    refresh(){
+        document.getElementById("currentClan").innerText = AXIS.clan || "None";
+    }
+};
+
+/* =========================
+   RANKING SYSTEM
+========================= */
+
+const Rankings = {
+    refresh(){
+        document.getElementById("seasonScore").innerText = AXIS.seasonScore;
+        document.getElementById("bestSeason").innerText = AXIS.bestSeason;
+    }
+};
+
+Store.apply();
+Profile.refresh();
+Clans.refresh();
+Rankings.refresh();
+  /* =========================
+   AXIS GAME ENGINE
+========================= */
+
+const Game = {
+
+    size:4,
+    grid:[],
+    history:[],
+    moves:0,
+    optimal:6,
+
+    init(){
+        this.generate();
+        this.render();
+    },
+
+    generate(){
+        this.grid = [];
+        this.history = [];
+        this.moves = 0;
+
+        for(let i=0;i<this.size*this.size;i++){
+            this.grid.push(Math.random() > 0.5 ? 1 : 0);
+        }
+
+        document.getElementById("moves").innerText = this.moves;
+        document.getElementById("optimal").innerText = this.optimal;
+        document.getElementById("gameMessage").innerText = "";
+    },
+
+    render(){
+        const container = document.getElementById("grid");
+        container.innerHTML = "";
+
+        this.grid.forEach((val,index)=>{
+            const cell = document.createElement("div");
+            cell.className = "cell";
+            if(val === 1) cell.classList.add("active");
+            cell.onclick = ()=>this.toggle(index);
+            container.appendChild(cell);
+        });
+    },
+
+    toggle(index){
+        this.history.push([...this.grid]);
+        this.flip(index);
+
+        this.moves++;
+        document.getElementById("moves").innerText = this.moves;
+
+        this.render();
+        this.checkWin();
+    },
+
+    flip(index){
+        const positions = [
+            index,
+            index-1,
+            index+1,
+            index-this.size,
+            index+this.size
+        ];
+
+        positions.forEach(i=>{
+            if(i >= 0 && i < this.grid.length){
+                this.grid[i] = this.grid[i] ? 0 : 1;
+            }
+        });
+    },
+
+    undo(){
+        if(this.history.length > 0){
+            this.grid = this.history.pop();
+            this.moves--;
+            document.getElementById("moves").innerText = this.moves;
+            this.render();
+        }
+    },
+
+    restart(){
+        this.generate();
+        this.render();
+    },
+
+    checkWin(){
+        if(this.grid.every(c=>c===0)){
+            this.win();
+        }
+    },
+
+    win(){
+
+        AXIS.clears++;
+        AXIS.totalMoves += this.moves;
+
+        let perfect = false;
+
+        if(this.moves <= this.optimal){
+            AXIS.perfects++;
+            AXIS.seasonScore += 100;
+            perfect = true;
+        }else{
+            AXIS.seasonScore += 50;
+        }
+
+        if(AXIS.seasonScore > AXIS.bestSeason){
+            AXIS.bestSeason = AXIS.seasonScore;
+        }
+
+        Storage.save(AXIS);
+
+        document.getElementById("gameMessage").innerText =
+            perfect ? "PERFECT CLEAR" : "CLEAR";
+
+        Profile.refresh();
+        Rankings.refresh();
+
+        setTimeout(()=>{
+            this.generate();
+            this.render();
+        },1500);
+    }
+};
+
+Game.init();
+  /* =========================
+   BADGE SYSTEM
+========================= */
+
+const Badges = {
+
+    get(){
+        let badges = [];
+
+        if(AXIS.perfects >= 5)
+            badges.push("Precision I");
+
+        if(AXIS.perfects >= 15)
+            badges.push("Precision II");
+
+        if(AXIS.clears >= 25)
+            badges.push("Persistence");
+
+        if(AXIS.seasonScore >= 500)
+            badges.push("Season Elite");
+
+        return badges;
+    },
+
+    render(){
+        const profilePanel = document.querySelector("#profile .panel");
+
+        let old = document.getElementById("badgeContainer");
+        if(old) old.remove();
+
+        const div = document.createElement("div");
+        div.id = "badgeContainer";
+        div.style.marginTop = "15px";
+
+        const list = this.get();
+
+        if(list.length === 0){
+            div.innerHTML = "<div class='stat'>No Badges Yet</div>";
+        } else {
+            list.forEach(b=>{
+                const el = document.createElement("div");
+                el.className = "badge";
+                el.innerText = b;
+                div.appendChild(el);
+            });
+        }
+
+        profilePanel.appendChild(div);
+    }
+};
+
+/* =========================
+   ADVANCED STATS
+========================= */
+
+const Advanced = {
+
+    render(){
+        let avg = 0;
+
+        if(AXIS.clears > 0){
+            avg = Math.floor(AXIS.totalMoves / AXIS.clears);
+        }
+
+        let statBlock = document.getElementById("advancedStats");
+        if(statBlock) statBlock.remove();
+
+        const div = document.createElement("div");
+        div.id = "advancedStats";
+        div.style.marginTop = "15px";
+
+        div.innerHTML = `
+            <div class="stat">Average Moves: ${avg}</div>
+            <div class="stat">Season Score: ${AXIS.seasonScore}</div>
+            <div class="stat">Best Season: ${AXIS.bestSeason}</div>
+        `;
+
+        document.querySelector("#profile .panel").appendChild(div);
+    }
+};
+
+/* =========================
+   OVERRIDE REFRESH TO INCLUDE BADGES
+========================= */
+
+const originalProfileRefresh = Profile.refresh;
+
+Profile.refresh = function(){
+    originalProfileRefresh.call(Profile);
+    Badges.render();
+    Advanced.render();
+};
+
+/* =========================
+   INITIALIZATION
+========================= */
+
+Store.apply();
+Profile.refresh();
+Clans.refresh();
+Rankings.refresh();
+Game.render();
+
+/* =========================
+   END OF FILE
+========================= */
+</script>
+</body>
+</html>
